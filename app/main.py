@@ -390,6 +390,17 @@ async def health_check():
     return {"status": "ok", "service": "SherLock Cloud API (Railway)", "version": "1.1.0"}
 
 
+@app.get("/v1/auth/check-username/{username}")
+async def check_username_availability(username: str):
+    """Check if a username is already taken. Returns available: true/false."""
+    if len(username) < 3 or len(username) > 50:
+        return {"available": False, "reason": "invalid_length"}
+    existing = get_user_by_username(username)
+    if existing:
+        return {"available": False, "reason": "taken"}
+    return {"available": True}
+
+
 @app.post("/v1/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(payload: UserRegisterRequest, http_request: Request):
     """Register a new user account on the official Railway cloud."""
