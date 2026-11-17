@@ -13,18 +13,18 @@ from src.models import PasswordEntry
 from src.config import get_railway_url, get_railway_vault_id, get_railway_token
 
 def main():
-    """Exemple bàsic per crear, sincronitzar i utilitzar una caixa forta"""
-    
+    """Exemple bàsic per crear, sincronitzar i utilitzar una SherLock"""
+
     # Configura el client Railway
     url = get_railway_url()
     vault_id = get_railway_vault_id()
     token = get_railway_token()
-    
+
     client = RailwayVaultClient(url, vault_id, token)
-    
+
     # Crea una contrasenya mestra
     master_password = "la-teu-contrasenya-mestra-1234567890"  # Mínim 16 caràcters
-    
+
     # Crea una nova entrada
     entry = PasswordEntry(
         site="github.com",
@@ -32,29 +32,29 @@ def main():
         password="la-teu-contrasenya-github",
         notes="Compte principal"
     )
-    
+
     entries = [entry]
-    
+
     # Serialitza les dades amb la contrasenya mestra
     blob = serialize_vault(entries, master_password)
-    
-    # Registra la caixa forta (primera vegada)
+
+    # Registra la SherLock (primera vegada)
     if not get_railway_vault_id():
         remote = client.register(blob)
         print(f"Registra: vault_id={remote.vault_id}, version={remote.version}")
         return
-    
-    # Descarrega la caixa forta
+
+    # Descarrega la SherLock
     remote = client.download()
     entries = deserialize_vault(remote.blob, master_password)
     print(f"Descarregat {len(entries)} entrades")
-    
+
     # Actualitza una entrada
     for e in entries:
         if e.site == "github.com":
             e.notes = "Compte principal - Actualitzat"
             break
-    
+
     # Pujar les actualitzacions amb control de versió
     blob = serialize_vault(entries, master_password)
     client.upload(blob, expected_version=remote.version)
@@ -66,7 +66,7 @@ if __name__ == "__main__":
 
 ## Còdiga shell (curl)
 
-### Registrar una nova caixa forta
+### Registrar una nova SherLock
 
 ```bash
 # Generar credencials (hauria de fer el codi client)
@@ -83,7 +83,7 @@ curl -X POST https://api.password-manager.cloud/v1/vaults \
   }"
 ```
 
-### Descarregar una caixa forta
+### Descarregar una SherLock
 
 ```bash
 vault_id="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
@@ -93,7 +93,7 @@ curl -X GET https://api.password-manager.cloud/v1/vaults/${vault_id} \
   -H "Authorization: Bearer ${token}" | jq '.'
 ```
 
-### Actualitzar una caixa forta
+### Actualitzar una SherLock
 
 ```bash
 vault_id="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
@@ -110,7 +110,7 @@ curl -X PUT https://api.password-manager.cloud/v1/vaults/${vault_id} \
   }"
 ```
 
-### Eliminar una caixa forta
+### Eliminar una SherLock
 
 ```bash
 vault_id="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
@@ -123,29 +123,29 @@ curl -X DELETE https://api.password-manager.cloud/v1/vaults/${vault_id} \
 ## Node.js
 
 ```javascript
-const axios = require('axios');
+const axios = require("axios");
 
-const RAILWAY_URL = 'https://api.password-manager.cloud';
-const VAULT_ID = 'el-teu-vault-id';
-const TOKEN = 'el-teu-token';
-const MASTER_PASSWORD = 'la-teu-mestra-16caracters';
+const RAILWAY_URL = "https://api.password-manager.cloud";
+const VAULT_ID = "el-teu-vault-id";
+const TOKEN = "el-teu-token";
+const MASTER_PASSWORD = "la-teu-mestra-16caracters";
 
 async function main() {
   const client = axios.create({
     baseURL: `${RAILWAY_URL}/v1/vaults`,
     headers: {
-      'Authorization': `Bearer ${TOKEN}`,
-      'Content-Type': 'application/json',
+      Authorization: `Bearer ${TOKEN}`,
+      "Content-Type": "application/json",
     },
   });
 
-  // Descarregar la caixa forta
+  // Descarregar la SherLock
   const response = await client.get(`/${VAULT_ID}`);
   const vault = response.data;
-  
+
   // Processa les dades blocades aquí
   console.log(`Descarregada versió ${vault.version}`);
-  
+
   // Pujar actualitzacions
   const blob = '{"salt":"...","nonce":"...","ciphertext":"...","version":"1"}';
   await client.put(`/${VAULT_ID}`, {
@@ -153,7 +153,7 @@ async function main() {
     token: TOKEN,
     blob: blob,
   });
-  
+
   console.log("Actualitzacions pujades");
 }
 
@@ -188,21 +188,21 @@ func main() {
     url := "https://api.password-manager.cloud/v1/vaults"
     vaultID := "el-teu-vault-id"
     token := "el-teu-token"
-    
-    // Registre una nova caixa forta
+
+    // Registre una nova SherLock
     reqBody := VaultRequest{
         VaultID: vaultID,
         Token:   token,
         Blob:    "{}",
     }
-    
+
     jsonData, _ := json.Marshal(reqBody)
     resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
     if err != nil {
         panic(err)
     }
     defer resp.Body.Close()
-    
+
     // Processa la resposta...
 }
 ```
@@ -217,29 +217,36 @@ interface VaultResponse {
   updated_at: string;
 }
 
-const RAILWAY_URL = 'https://api.password-manager.cloud';
+const RAILWAY_URL = "https://api.password-manager.cloud";
 
-async function getVault(vaultId: string, token: string): Promise<VaultResponse> {
+async function getVault(
+  vaultId: string,
+  token: string,
+): Promise<VaultResponse> {
   const response = await fetch(`${RAILWAY_URL}/v1/vaults/${vaultId}`, {
     headers: {
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/json',
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
     },
   });
-  
+
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
-  
+
   return response.json();
 }
 
-async function updateVault(vaultId: string, token: string, blob: string): Promise<VaultResponse> {
+async function updateVault(
+  vaultId: string,
+  token: string,
+  blob: string,
+): Promise<VaultResponse> {
   const response = await fetch(`${RAILWAY_URL}/v1/vaults/${vaultId}`, {
-    method: 'PUT',
+    method: "PUT",
     headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       vault_id: vaultId,
@@ -247,25 +254,32 @@ async function updateVault(vaultId: string, token: string, blob: string): Promis
       blob: blob,
     }),
   });
-  
+
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.detail || 'Unknown error');
+    throw new Error(error.detail || "Unknown error");
   }
-  
+
   return response.json();
 }
 
 // Ús
 (async () => {
   try {
-    const vault = await getVault('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'token123');
+    const vault = await getVault(
+      "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "token123",
+    );
     console.log(`Versió: ${vault.version}`);
-    
-    const updated = await updateVault('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'token123', 'blob');
-    console.log('Actualitzat!');
+
+    const updated = await updateVault(
+      "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "token123",
+      "blob",
+    );
+    console.log("Actualitzat!");
   } catch (error) {
-    console.error('Error:', error);
+    console.error("Error:", error);
   }
 })();
 ```
@@ -293,7 +307,7 @@ async fn get_vault(vault_id: &str, token: &str) -> Result<VaultResponse, reqwest
         .await?
         .json()
         .await?;
-    
+
     Ok(response)
 }
 
@@ -301,10 +315,10 @@ async fn get_vault(vault_id: &str, token: &str) -> Result<VaultResponse, reqwest
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let vault_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
     let token = "token123";
-    
+
     let vault = get_vault(vault_id, token).await?;
     println!("Versió: {}", vault.version);
-    
+
     Ok(())
 }
 ```
@@ -312,49 +326,57 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ## Errors Comuns
 
 ### 409 Vault Already Exists
+
 ```json
 {
   "detail": "Vault already exists"
 }
 ```
+
 **Solució**: El `vault_id` ja existeix. Utilitza un identificador únic.
 
 ### 404 Vault Not Found
+
 ```json
 {
   "detail": "Vault not found"
 }
 ```
-**Solució**: El `vault_id` no existeix. Crea una nova caixa forta primer.
+
+**Solució**: El `vault_id` no existeix. Crea una nova SherLock primer.
 
 ### 409 Version Conflict
+
 ```json
 {
   "detail": "Version conflict: expected 1, got 2"
 }
 ```
+
 **Solució**: Hi ha hagut un conflicte de versió. L'altra instància actualitzà alhora. Actualitza amb la nova versió del servidor.
 
 ### 401 Unauthorized
+
 ```json
 {
   "detail": "Invalid token"
 }
 ```
+
 **Solució**: El token és invàlid. Verifica que estàs enviant el token correcte.
 
 ## Referència de la API
 
-| Mètode | Endpoint | Descripció |
-|--------|----------|------------|
-| `POST` | `/v1/vaults` | Registrar nova caixa forta |
-| `GET` | `/v1/vaults/{vault_id}` | Descarregar caixa forta |
-| `PUT` | `/v1/vaults/{vault_id}` | Actualitzar caixa forta |
-| `DELETE` | `/v1/vaults/{vault_id}` | Eliminar caixa forta |
+| Mètode   | Endpoint                | Descripció              |
+| -------- | ----------------------- | ----------------------- |
+| `POST`   | `/v1/vaults`            | Registrar nova SherLock |
+| `GET`    | `/v1/vaults/{vault_id}` | Descarregar SherLock    |
+| `PUT`    | `/v1/vaults/{vault_id}` | Actualitzar SherLock    |
+| `DELETE` | `/v1/vaults/{vault_id}` | Eliminar SherLock       |
 
 ## Preguntes Freqüents
 
-**Q: Com genero una caixa forta única?**
+**Q: Com genero una SherLock única?**
 A: Utilitza `uuid.uuid4().hex` per crear un `vault_id` únic.
 
 **Q: Què és el token?**

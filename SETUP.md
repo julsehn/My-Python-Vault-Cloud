@@ -6,24 +6,24 @@ Aquest fitxer explica com configurar el servei Railway perquè pugui comunicar-s
 
 L'API utilitza una estructura senzilla basada en identificadors i tokens:
 
-### Registre de Caixa Forta (Primera Experiència)
+### Registre de SherLock (Primera Experiència)
 
-Quan es crea una nova caixa forta per primera vegada, el client genera:
+Quan es crea una nova SherLock per primera vegada, el client genera:
 
-- **vault_id**: UUID genèric per identificar la caixa forta
+- **vault_id**: UUID genèric per identificar la SherLock
 - **token**: Token d'autenticació (salt aleatori)
-- **blob**: Les dades de la caixa forta en format blocat
+- **blob**: Les dades de la SherLock en format blocat
 
-### Obtenir/Oferir una Caixa Forta Existente
+### Obtenir/Oferir una SherLock Existente
 
-Per descarregar/actualitzar una caixa forta ja existent:
+Per descarregar/actualitzar una SherLock ja existent:
 
-- **vault_id**: El mateix UUID que es va utilitzar per crear la caixa forta
+- **vault_id**: El mateix UUID que es va utilitzar per crear la SherLock
 - **token**: El token d'autenticació (es passa com a `expected_version` per a la verificació de conflicte)
 
 ## Exemples d'Ús
 
-### Registrar una Nova Caixa Forta
+### Registrar una Nova SherLock
 
 ```bash
 # Primer, genera credencials del client
@@ -33,7 +33,7 @@ python -c "from src.railway_client import create_vault_credentials; print(create
 # vault_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 # token: "X9y8Z7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2H1g0F"
 
-# Pujar la caixa forta blocada (vuitat primer)
+# Pujar la SherLock blocada (vuitat primer)
 curl -X POST https://el-teu-servici.up.railway.app/v1/vaults \
   -H "Content-Type: application/json" \
   -d '{
@@ -43,7 +43,7 @@ curl -X POST https://el-teu-servici.up.railway.app/v1/vaults \
   }'
 ```
 
-### Descarregar Caixa Forta
+### Descarregar SherLock
 
 ```bash
 curl -X GET https://el-teu-servici.up.railway.app/v1/vaults/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
@@ -64,7 +64,7 @@ curl -X PUT https://el-teu-servici.up.railway.app/v1/vaults/a1b2c3d4-e5f6-7890-a
   }'
 ```
 
-### Eliminar Caixa Forta
+### Eliminar SherLock
 
 ```bash
 curl -X DELETE https://el-teu-servici.up.railway.app/v1/vaults/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
@@ -75,11 +75,11 @@ curl -X DELETE https://el-teu-servici.up.railway.app/v1/vaults/a1b2c3d4-e5f6-789
 
 ### 409 Vault Already Exists
 
-Es va provar de crear una caixa forta amb el mateix `vault_id`. Utilitza un identificador únic.
+Es va provar de crear una SherLock amb el mateix `vault_id`. Utilitza un identificador únic.
 
 ### 404 Vault Not Found
 
-El `vault_id` no existeix o es va eliminar. Crea una nova caixa forta.
+El `vault_id` no existeix o es va eliminar. Crea una nova SherLock.
 
 ### 409 Version Conflict
 
@@ -118,7 +118,7 @@ TOKEN = "el-teu-token"
 
 client = RailwayVaultClient(RAILWAY_URL, VAULT_ID, TOKEN)
 
-# Descarregar la caixa forta
+# Descarregar la SherLock
 vault = client.download()
 entries = deserialize_vault(vault.blob, "password-mestra")
 

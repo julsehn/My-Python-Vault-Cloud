@@ -218,7 +218,7 @@ class VaultStorage:
                 return None
             res = dict(row)
             if user_id is not None and res.get("user_id") and res["user_id"] != user_id:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tens permís per accedir a aquesta caixa forta")
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tens permís per accedir a aquesta SherLock")
             return res
 
     def upsert_vault(self, vault_id: str, blob: str, user_id: int, expected_version: Optional[int] = None) -> dict:
@@ -230,7 +230,7 @@ class VaultStorage:
             if current:
                 curr_user = current["user_id"]
                 if curr_user is not None and curr_user != user_id:
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="La caixa forta pertany a un altre usuari")
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="La SherLock pertany a un altre usuari")
 
                 if expected_version is not None and current["version"] != expected_version:
                     raise HTTPException(
@@ -272,7 +272,7 @@ class VaultStorage:
             if not current:
                 return False
             if current["user_id"] is not None and current["user_id"] != user_id:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tens permís per eliminar aquesta caixa forta")
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tens permís per eliminar aquesta SherLock")
             conn.execute("DELETE FROM vaults WHERE vault_id = ?", (vault_id,))
             conn.commit()
             return True
@@ -282,7 +282,7 @@ vault_storage = VaultStorage()
 
 # App Definition
 app = FastAPI(
-    title="Caixa Forta Cloud API",
+    title="SherLock Cloud API",
     description="Oficial Railway Synchronization Backend - Zero-knowledge encrypted vault storage",
     version="1.1.0",
 )
@@ -329,13 +329,13 @@ async def get_current_user(
 
 def validate_vault_id(vault_id: str) -> str:
     if not VAULT_ID_PATTERN.fullmatch(vault_id):
-        raise HTTPException(status_code=400, detail="Format d'identificador de caixa forta invàlid")
+        raise HTTPException(status_code=400, detail="Format d'identificador de SherLock invàlid")
     return vault_id
 
 
 def check_blob_size(blob: str) -> None:
     if len(blob.encode("utf-8")) > MAX_BLOB_BYTES:
-        raise HTTPException(status_code=413, detail="La caixa forta encriptada és massa gran")
+        raise HTTPException(status_code=413, detail="La SherLock encriptada és massa gran")
 
 
 # Request & Response Models
@@ -387,7 +387,7 @@ class UserResponse(BaseModel):
 @app.get("/healthz")
 async def health_check():
     """Health check endpoint for Railway and clients."""
-    return {"status": "ok", "service": "Caixa Forta Cloud API (Railway)", "version": "1.1.0"}
+    return {"status": "ok", "service": "SherLock Cloud API (Railway)", "version": "1.1.0"}
 
 
 @app.post("/v1/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -521,7 +521,7 @@ async def get_my_vault(user: dict = Depends(get_current_user)):
     """Retrieve the current user's encrypted vault."""
     vault = vault_storage.get_vault_by_user_id(user["id"])
     if not vault:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Encara no hi ha cap caixa forta desada per aquest usuari")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Encara no hi ha cap SherLock desada per aquest usuari")
     return GetVaultResponse(
         vault_id=vault["vault_id"],
         blob=vault["blob"],
@@ -584,7 +584,7 @@ async def get_vault(
     v_id = validate_vault_id(vault_id)
     vault = vault_storage.get_vault_by_id(v_id, user_id=user["id"])
     if not vault:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Caixa forta no trobada")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="SherLock no trobat")
     return GetVaultResponse(
         vault_id=vault["vault_id"],
         blob=vault["blob"],
@@ -625,7 +625,7 @@ async def delete_vault(
     v_id = validate_vault_id(vault_id)
     deleted = vault_storage.delete_vault(v_id, user["id"])
     if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Caixa forta no trobada")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="SherLock no trobat")
     return None
 
 
