@@ -15,6 +15,7 @@ from contextlib import closing
 from threading import Lock
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends, Request, status
+from starlette.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field, EmailStr
@@ -46,6 +47,7 @@ except Exception:
 DB_PATH = DB_DIR / "vaults.db"
 
 MAX_BLOB_BYTES = int(os.environ.get("MAX_BLOB_BYTES", str(10 * 1024 * 1024)))
+MAX_REQUEST_BODY_SIZE = int(os.environ.get("MAX_REQUEST_BODY_SIZE", str(12 * 1024 * 1024)))
 VAULT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
 
 
@@ -301,6 +303,20 @@ if cors_origins:
         allow_headers=["Authorization", "Content-Type"],
     )
 
+
+@app.middleware("http")
+async def check_request_size(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            size = int(content_length)
+            if size > MAX_REQUEST_BODY_SIZE:
+                return JSONResponse(status_code=413, content={"detail": "Contingut massa gran"})
+        except ValueError:
+            pass
+    return await call_next(request)
+
+
 security = HTTPBearer(auto_error=False)
 
 
@@ -359,13 +375,13 @@ class VaultBlobRequest(BaseModel):
 
 class UserRegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=8)
+    password: str = Field(..., min_length=8, max_length=128)
     email: Optional[EmailStr] = None
 
 
 class UserLoginRequest(BaseModel):
     username: str = Field(...)
-    password: str = Field(...)
+    password: str = Field(..., max_length=128)
 
 
 class RefreshTokenRequest(BaseModel):
@@ -572,6 +588,14 @@ async def register_vault(
     """Register or initialize a vault with a specific ID."""
     v_id = validate_vault_id(request.vault_id)
     check_blob_size(request.blob)
+
+    existing = vault_storage.get_vault_by_id(v_id, user_id=user["id"])
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Aquest identificador de SherLock ja existeix per a aquest usuari",
+        )
+
     vault = vault_storage.upsert_vault(
         vault_id=v_id,
         blob=request.blob,
