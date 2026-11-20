@@ -542,6 +542,17 @@ async def get_me(user: dict = Depends(get_current_user)):
     }
 
 
+@app.delete("/v1/auth/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_me(user: dict = Depends(get_current_user)):
+    """Delete the current authenticated user and all their vaults (GDPR right to erasure)."""
+    user_id = user["id"]
+    with closing(get_db_connection()) as conn:
+        conn.execute("DELETE FROM vaults WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.commit()
+    return None
+
+
 # User-centric vault endpoints (no manual vault_id needed!)
 @app.get("/v1/vault", response_model=GetVaultResponse)
 async def get_my_vault(user: dict = Depends(get_current_user)):
