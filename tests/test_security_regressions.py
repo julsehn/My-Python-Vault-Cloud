@@ -178,6 +178,17 @@ class VaultVersionTests(unittest.TestCase):
         self.assertEqual(client.get("/v1/vault", headers=headers).json()["version"], 2)
 
 
+class ValidationErrorTests(unittest.TestCase):
+    def test_validation_errors_do_not_echo_passwords(self):
+        short_password = "short-pass1"
+        response = client.post(
+            "/v1/auth/register",
+            json={"username": _unique("short"), "password": short_password},
+        )
+        self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY)
+        self.assertNotIn(short_password, response.text)
+
+
 class BlobValidationTests(unittest.TestCase):
     def test_empty_and_malformed_blobs_are_rejected(self):
         username = _unique("blob")

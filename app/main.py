@@ -19,6 +19,7 @@ from contextlib import closing
 from threading import Lock
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends, Request, status
+from fastapi.exceptions import RequestValidationError
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -400,6 +401,15 @@ app = FastAPI(
     description="Oficial Railway Synchronization Backend - Zero-knowledge encrypted vault storage",
     version="1.1.0",
 )
+
+@app.exception_handler(RequestValidationError)
+async def sanitized_validation_error(_request: Request, exc: RequestValidationError):
+    """Never echo request values (passwords, blobs) in validation errors."""
+    errors = [
+        {"loc": error.get("loc"), "msg": error.get("msg"), "type": error.get("type")}
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": errors})
 
 cors_origins = [
     origin.strip()
