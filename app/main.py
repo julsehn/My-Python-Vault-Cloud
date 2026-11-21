@@ -440,13 +440,17 @@ if cors_origins:
 @app.middleware("http")
 async def check_request_size(request: Request, call_next):
     content_length = request.headers.get("content-length")
+    # Mutating requests must declare their size; this closes the chunked-body
+    # bypass of the Content-Length check.
+    if request.method in {"POST", "PUT", "PATCH"} and content_length is None:
+        return JSONResponse(status_code=411, content={"detail": "Cal Content-Length"})
     if content_length is not None:
         try:
             size = int(content_length)
-            if size > MAX_REQUEST_BODY_SIZE:
+            if size < 0 or size > MAX_REQUEST_BODY_SIZE:
                 return JSONResponse(status_code=413, content={"detail": "Contingut massa gran"})
         except ValueError:
-            pass
+            return JSONResponse(status_code=400, content={"detail": "Content-Length invàlid"})
     return await call_next(request)
 
 
