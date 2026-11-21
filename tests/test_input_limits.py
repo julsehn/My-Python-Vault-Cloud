@@ -6,13 +6,14 @@ import unittest
 from collections import defaultdict, deque
 
 # Set up environment before importing main
-os.environ["SESSION_SECRET"] = "test-secret-for-unit-tests"
-os.environ["DB_DIR"] = "/tmp/test-vaults"
+os.environ.setdefault("SESSION_SECRET", "test-secret-for-unit-tests")
 
 from fastapi import status
 from starlette.testclient import TestClient
 
 from app.main import app, init_db, MAX_BLOB_BYTES, MAX_REQUEST_BODY_SIZE
+
+from helpers import valid_blob
 
 init_db()
 client = TestClient(app)
@@ -88,14 +89,14 @@ class InputLimitsTests(unittest.TestCase):
 
         first_response = client.post(
             "/v1/vaults",
-            json={"vault_id": vault_id, "blob": "encrypted-data"},
+            json={"vault_id": vault_id, "blob": valid_blob(b"encrypted-data")},
             headers={"Authorization": f"Bearer {token}"},
         )
         self.assertEqual(first_response.status_code, status.HTTP_201_CREATED)
 
         second_response = client.post(
             "/v1/vaults",
-            json={"vault_id": vault_id, "blob": "encrypted-data-again"},
+            json={"vault_id": vault_id, "blob": valid_blob(b"encrypted-data-again")},
             headers={"Authorization": f"Bearer {token}"},
         )
         self.assertEqual(second_response.status_code, status.HTTP_409_CONFLICT)

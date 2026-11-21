@@ -59,3 +59,9 @@ app/utils/keys/
 
 # Local configuration
 config.local.json
+
+# Local SQLite data (never commit password hashes or refresh-token hashes)
+vaults.db
+vaults.db-wal
+vaults.db-shm
+*.db.bak-*

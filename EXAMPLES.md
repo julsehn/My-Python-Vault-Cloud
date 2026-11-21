@@ -1,5 +1,10 @@
 # Exemples d'Ús
 
+> **Nota històrica:** aquests exemples corresponen al client Python llegat i a
+> l'antic model de `token` per caixa. L'API actual fa servir comptes, JWT de 15
+> minuts, refresh tokens i `expected_version`; consulta [README.md](README.md) i
+> [SETUP.md](SETUP.md) per al flux vigent.
+
 Aquest fitxer conté exemples de còdic per utilitzar l'API del Password Manager Cloud.
 
 ## Python

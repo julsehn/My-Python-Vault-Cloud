@@ -1,127 +1,83 @@
-# Configuració del Servei Railway
+# Configuració i proves de l'API
 
-Aquest fitxer explica com configurar el servei Railway perquè pugui comunicar-se amb el client de l'aplicació de gestió de contrasenyes.
+La guia principal és [README.md](README.md). Aquest fitxer només recull els
+passos per provar l'API des de la línia d'ordres.
 
-## Estructura de Dades
-
-L'API utilitza una estructura senzilla basada en identificadors i tokens:
-
-### Registre de SherLock (Primera Experiència)
-
-Quan es crea una nova SherLock per primera vegada, el client genera:
-
-- **vault_id**: UUID genèric per identificar la SherLock
-- **token**: Token d'autenticació (salt aleatori)
-- **blob**: Les dades de la SherLock en format blocat
-
-### Obtenir/Oferir una SherLock Existente
-
-Per descarregar/actualitzar una SherLock ja existent:
-
-- **vault_id**: El mateix UUID que es va utilitzar per crear la SherLock
-- **token**: El token d'autenticació (es passa com a `expected_version` per a la verificació de conflicte)
-
-## Exemples d'Ús
-
-### Registrar una Nova SherLock
+## 1. Variables d'entorn
 
 ```bash
-# Primer, genera credencials del client
-python -c "from src.railway_client import create_vault_credentials; print(create_vault_credentials())"
+export SESSION_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+export DB_DIR="$(mktemp -d)"
+```
 
-# Resultat:
-# vault_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-# token: "X9y8Z7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2H1g0F"
+En producció, `SESSION_SECRET` ha de ser estable entre desplegaments. Si el
+canvies, totes les sessions existents queden invalidades.
 
-# Pujar la SherLock blocada (vuitat primer)
-curl -X POST https://el-teu-servici.up.railway.app/v1/vaults \
+## 2. Crear un compte
+
+```bash
+curl -sS -X POST "$CLOUD_URL/v1/auth/register" \
   -H "Content-Type: application/json" \
-  -d '{
-    "vault_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-    "token": "X9y8Z7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2H1g0F",
-    "blob": "{}"
-  }'
+  -d '{"username":"prova","password":"una-contrasenya-llarga"}'
 ```
 
-### Descarregar SherLock
+La resposta inclou `access_token`, `refresh_token` i `vault_id`. Desa els dos
+tokens; el client de l'app ho fa automàticament i mai no exposa el refresh
+token al frontend.
+
+## 3. Iniciar sessió
 
 ```bash
-curl -X GET https://el-teu-servici.up.railway.app/v1/vaults/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
-  -H "Authorization: Bearer X9y8Z7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2H1g0F"
-```
-
-### Pujar Actualitzacions
-
-```bash
-# Blocar actualitzacions amb control de versió
-curl -X PUT https://el-teu-servici.up.railway.app/v1/vaults/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
+curl -sS -X POST "$CLOUD_URL/v1/auth/login" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer X9y8Z7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2H1g0F" \
-  -d '{
-    "vault_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-    "token": "version-1",  # Compara amb la versió actual
-    "blob": "{dades blocades}"
-  }'
+  -d '{"username":"prova","password":"una-contrasenya-llarga"}'
 ```
 
-### Eliminar SherLock
+## 4. Renovar l'access token
+
+L'access token dura 15 minuts. El client en demana un de nou amb el refresh
+token abans de cada operació:
 
 ```bash
-curl -X DELETE https://el-teu-servici.up.railway.app/v1/vaults/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
-  -H "Authorization: Bearer X9y8Z7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2H1g0F"
+curl -sS -X POST "$CLOUD_URL/v1/auth/refresh" \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token":"<refresh_token>"}'
 ```
 
-## Erros Comuns
+## 5. Pujar i baixar la caixa
 
-### 409 Vault Already Exists
+El `blob` és el JSON xifrat que genera l'app (`salt`, `nonce`, `ciphertext`,
+`version`). El servidor en valida l'estructura però no el desxifra.
 
-Es va provar de crear una SherLock amb el mateix `vault_id`. Utilitza un identificador únic.
+```bash
+# Primera pujada: no cal expected_version
+curl -sS -X PUT "$CLOUD_URL/v1/vault" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary @vault-upload.json
 
-### 404 Vault Not Found
+# Actualització: expected_version és obligatori
+curl -sS -X PUT "$CLOUD_URL/v1/vault" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"blob":"<blob-xifrat>","expected_version":1}'
 
-El `vault_id` no existeix o es va eliminar. Crea una nova SherLock.
-
-### 409 Version Conflict
-
-Hi ha hagut un conflicte de versió. Aquest passa quan dues instàncies intenten actualitzar alhora. El client reprendrà amb la nova versió automàticament.
-
-## Flux de Funcionament
-
-```
-Usuari 1 (macOS)     Railway API     Usuari 2 (Windows)
-    │                   │                   │
-    ├─── Crea caixa ───→│                   │
-    │                   │                   │
-    │                   ├─── Crea i guarda │
-    │                   │                   │
-    ├─── Dóna les dades─→│                   │
-    │                   │                   │
-    ├─── Descarrega ───→│                   │
-    │                   │                   │
-    │                   ├─── Obre i envia │
-    │                   │                   │
-    │                   └───────────────────→
-    │                   │
+# Descarregar
+curl -sS "$CLOUD_URL/v1/vault" -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
 
-## Codi del Client
+Si `expected_version` no coincideix, la resposta és `409`: baixa la caixa o
+resol el conflicte abans de tornar a pujar.
 
-El codi del client ja està preparat per connectar:
+## 6. Tancar sessió i eliminar el compte
 
-```python
-from src.railway_client import RailwayVaultClient
+```bash
+curl -sS -X POST "$CLOUD_URL/v1/auth/logout" \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token":"<refresh_token>"}'
 
-# Configura les credencials del servei Railway
-RAILWAY_URL = "https://el-teu-servici.up.railway.app"
-VAULT_ID = "el-teu-vault-id"
-TOKEN = "el-teu-token"
-
-client = RailwayVaultClient(RAILWAY_URL, VAULT_ID, TOKEN)
-
-# Descarregar la SherLock
-vault = client.download()
-entries = deserialize_vault(vault.blob, "password-mestra")
-
-# Pujar actualitzacions
-client.upload(encrypted_blob)
+curl -sS -X DELETE "$CLOUD_URL/v1/auth/me" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
+
+`DELETE /v1/auth/me` elimina el compte, la caixa i tots els refresh tokens.

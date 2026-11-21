@@ -53,6 +53,8 @@ Si vols variar el port o altres configuracions, afegeix variables d'entorn:
 
 - `SESSION_SECRET`: clau aleatòria estable per signar els tokens d'accés del compte
 - `MAX_BLOB_BYTES`: 10485760 (default 10MB, en bytes)
+- `TRUST_PROXY`: `1` darrere del proxy de Railway, perquè els límits de peticions usin la IP real
+- `DB_DIR`: directori de `vaults.db` (per defecte `/data` si existeix)
 
 ## Verifica el Desplegament
 
@@ -98,11 +100,11 @@ railway up --project password-manager-cloud
 
 ## API Endpoints
 
-- `GET /` - Health check
-- `POST /v1/vaults` - Register new vault
-- `GET /v1/vaults/{vault_id}` - Download vault (requires Bearer token)
-- `PUT /v1/vaults/{vault_id}` - Upload vault version (requires Bearer token)
-- `DELETE /v1/vaults/{vault_id}` - Delete vault (requires Bearer token)
+- `GET /healthz` - Health check
+- `POST /v1/auth/register`, `/v1/auth/login`, `/v1/auth/refresh`, `/v1/auth/logout`
+- `GET|DELETE /v1/auth/me` - Account summary / deletion
+- `GET|PUT /v1/vault` - Account vault download / versioned upload
+- `GET|PUT|DELETE /v1/vaults/{vault_id}` - Explicit vault operations (owner only)
 
 ## Manteniment
 
