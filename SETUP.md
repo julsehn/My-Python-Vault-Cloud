@@ -8,6 +8,7 @@ passos per provar l'API des de la línia d'ordres.
 ```bash
 export SESSION_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
 export DB_DIR="$(mktemp -d)"
+export CLOUD_URL="http://127.0.0.1:8000"
 ```
 
 En producció, `SESSION_SECRET` ha de ser estable entre desplegaments. Si el

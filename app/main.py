@@ -11,6 +11,7 @@ import os
 import re
 import sqlite3
 import hashlib
+import ipaddress
 import secrets
 import shutil
 import time
@@ -184,11 +185,21 @@ def verify_password(plain_password: str, stored_hash: str) -> bool:
 
 
 def client_ip(request: Request) -> str:
-    """Return the client IP, trusting the proxy header only when configured."""
+    """Return the client IP, trusting the proxy header only when configured.
+
+    With one trusted reverse proxy the closest (last) address is the one the
+    proxy observed. Validate it so a forged header cannot become a rate-limit
+    key or grow the in-memory map with arbitrary strings.
+    """
     if TRUST_PROXY:
         forwarded = request.headers.get("x-forwarded-for", "")
         if forwarded:
-            return forwarded.split(",", 1)[0].strip()
+            candidate = forwarded.rsplit(",", 1)[-1].strip()
+            try:
+                ipaddress.ip_address(candidate)
+                return candidate
+            except ValueError:
+                pass
     return request.client.host if request.client else "unknown"
 
 
