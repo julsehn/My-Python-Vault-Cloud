@@ -525,7 +525,7 @@ class VaultBlobRequest(BaseModel):
 
 class UserRegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=8, max_length=128)
+    password: str = Field(..., min_length=12, max_length=128)
     email: Optional[EmailStr] = None
 
 
