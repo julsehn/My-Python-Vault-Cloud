@@ -5,7 +5,6 @@ import time
 import unittest
 from collections import defaultdict, deque
 
-# Set up environment before importing main
 os.environ.setdefault("SESSION_SECRET", "test-secret-for-unit-tests")
 
 from fastapi import status
@@ -36,7 +35,6 @@ def _login(client, username, password):
 class InputLimitsTests(unittest.TestCase):
     def test_request_body_too_large(self):
         """Request with Content-Length > MAX_REQUEST_BODY_SIZE returns 413."""
-        # Create a large body exceeding the limit
         large_body = "a" * (MAX_REQUEST_BODY_SIZE + 1)
         response = client.post(
             "/v1/auth/register",

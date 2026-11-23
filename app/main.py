@@ -31,7 +31,6 @@ from pathlib import Path
 import jwt
 from argon2 import PasswordHasher, exceptions as argon2_exceptions
 
-# JWT & Security Configuration
 SECRET_KEY = os.environ.get("SESSION_SECRET") or os.environ.get("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("SESSION_SECRET must be configured before starting the cloud API")
@@ -52,7 +51,6 @@ TRUST_PROXY = os.environ.get("TRUST_PROXY", "").lower() in {"1", "true", "yes"}
 _auth_attempts: dict[str, deque[float]] = defaultdict(deque)
 _auth_attempts_lock = Lock()
 
-# Database Configuration
 raw_db_dir = os.environ.get("DB_DIR", "/data" if os.path.exists("/data") else ".")
 DB_DIR = Path(raw_db_dir)
 try:
@@ -165,7 +163,6 @@ def backup_db_before_migration() -> None:
 
 backup_db_before_migration()
 
-# Run DB initialization
 init_db()
 
 
@@ -301,7 +298,6 @@ def compute_user_vault_id(user_id: int, _username: str = "") -> str:
         return vault_id
 
 
-# Storage Manager
 class VaultStorage:
     def __init__(self):
         pass
@@ -406,7 +402,6 @@ class VaultStorage:
 
 vault_storage = VaultStorage()
 
-# App Definition
 app = FastAPI(
     title="SherLock Cloud API",
     description="Oficial Railway Synchronization Backend - Zero-knowledge encrypted vault storage",
@@ -529,7 +524,6 @@ def validate_blob(blob: str) -> None:
         raise HTTPException(status_code=422, detail="La SherLock encriptada és massa curta")
 
 
-# Request & Response Models
 class RegisterVaultRequest(BaseModel):
     vault_id: str = Field(..., min_length=1)
     blob: str = Field(...)
@@ -573,7 +567,6 @@ class UserResponse(BaseModel):
     token_type: str = "bearer"
 
 
-# Routes
 @app.get("/")
 @app.get("/healthz")
 async def health_check():
@@ -736,7 +729,6 @@ async def delete_me(user: dict = Depends(get_current_user)):
     return None
 
 
-# User-centric vault endpoints (no manual vault_id needed!)
 @app.get("/v1/vault", response_model=GetVaultResponse)
 async def get_my_vault(user: dict = Depends(get_current_user)):
     """Retrieve the current user's encrypted vault."""
@@ -773,7 +765,6 @@ async def upload_my_vault(
     )
 
 
-# Explicit vault_id endpoints
 @app.post("/v1/vaults", response_model=GetVaultResponse, status_code=status.HTTP_201_CREATED)
 async def register_vault(
     request: RegisterVaultRequest,

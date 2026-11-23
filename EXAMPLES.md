@@ -1,391 +1,234 @@
-# Exemples d'Ús
+# Exemples d'ús
 
-> **Nota històrica:** aquests exemples corresponen al client Python llegat i a
-> l'antic model de `token` per caixa. L'API actual fa servir comptes, JWT de 15
-> minuts, refresh tokens i `expected_version`; consulta [README.md](README.md) i
-> [SETUP.md](SETUP.md) per al flux vigent.
+Exemples per parlar amb l'API des de fora de l'app. Tots fan servir el model de compte: un usuari, un JWT de 15 minuts i una caixa per compte. La caixa no té un `token` propi: el que la identifica és el compte i el `Bearer` de la sessió. El `blob` és el JSON xifrat que genera el client; el servidor el valida i el guarda, però no el pot desxifrar.
 
-Aquest fitxer conté exemples de còdic per utilitzar l'API del Password Manager Cloud.
-
-## Python
-
-```python
-import sys
-from pathlib import Path
-from src.railway_client import RailwayVaultClient, create_vault_credentials
-from src.encryption import serialize_vault, deserialize_vault
-from src.models import PasswordEntry
-from src.config import get_railway_url, get_railway_vault_id, get_railway_token
-
-def main():
-    """Exemple bàsic per crear, sincronitzar i utilitzar una SherLock"""
-
-    # Configura el client Railway
-    url = get_railway_url()
-    vault_id = get_railway_vault_id()
-    token = get_railway_token()
-
-    client = RailwayVaultClient(url, vault_id, token)
-
-    # Crea una contrasenya mestra
-    master_password = "la-teu-contrasenya-mestra-1234567890"  # Mínim 16 caràcters
-
-    # Crea una nova entrada
-    entry = PasswordEntry(
-        site="github.com",
-        username="el teu usuari",
-        password="la-teu-contrasenya-github",
-        notes="Compte principal"
-    )
-
-    entries = [entry]
-
-    # Serialitza les dades amb la contrasenya mestra
-    blob = serialize_vault(entries, master_password)
-
-    # Registra la SherLock (primera vegada)
-    if not get_railway_vault_id():
-        remote = client.register(blob)
-        print(f"Registra: vault_id={remote.vault_id}, version={remote.version}")
-        return
-
-    # Descarrega la SherLock
-    remote = client.download()
-    entries = deserialize_vault(remote.blob, master_password)
-    print(f"Descarregat {len(entries)} entrades")
-
-    # Actualitza una entrada
-    for e in entries:
-        if e.site == "github.com":
-            e.notes = "Compte principal - Actualitzat"
-            break
-
-    # Pujar les actualitzacions amb control de versió
-    blob = serialize_vault(entries, master_password)
-    client.upload(blob, expected_version=remote.version)
-    print("Actualitzacions pujades amb èxit")
-
-if __name__ == "__main__":
-    main()
-```
-
-## Còdiga shell (curl)
-
-### Registrar una nova SherLock
+Les ordres necessiten `curl` i `jq`. Canvia `CLOUD_URL` per la URL del servei. Si encara no l'has arrencat en local, comença per [SETUP.md](SETUP.md).
 
 ```bash
-# Generar credencials (hauria de fer el codi client)
-vault_id="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-token="X9y8Z7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2H1g0F"
-blob='{"salt":"...","nonce":"...","ciphertext":"...","version":"1"}'
+export CLOUD_URL="http://127.0.0.1:8000"
+```
 
-curl -X POST https://api.password-manager.cloud/v1/vaults \
+## Flux complet amb curl
+
+### 1. Registrar el compte
+
+```bash
+AUTH=$(curl -sS -X POST "$CLOUD_URL/v1/auth/register" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"vault_id\": \"${vault_id}\",
-    \"token\": \"${token}\",
-    \"blob\": \"${blob}\"
-  }"
+  -d '{"username":"prova","password":"una-contrasenya-llarga"}')
+
+printf '%s\n' "$AUTH" | jq
+ACCESS_TOKEN=$(printf '%s' "$AUTH" | jq -r .access_token)
+REFRESH_TOKEN=$(printf '%s' "$AUTH" | jq -r .refresh_token)
 ```
 
-### Descarregar una SherLock
+Respon `201` amb aquesta forma:
 
-```bash
-vault_id="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-token="X9y8Z7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2H1g0F"
-
-curl -X GET https://api.password-manager.cloud/v1/vaults/${vault_id} \
-  -H "Authorization: Bearer ${token}" | jq '.'
+```json
+{
+  "user_id": 7,
+  "username": "prova",
+  "email": null,
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "refresh_token": "...",
+  "vault_id": "vault_...",
+  "token_type": "bearer"
+}
 ```
 
-### Actualitzar una SherLock
+`vault_id` ja ve creat, però la caixa no existeix fins al primer `PUT`. No el generis tu; el servidor el crea i el guarda al compte. `email` és opcional.
+
+### 2. Iniciar sessió
 
 ```bash
-vault_id="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-token="X9y8Z7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2H1g0F"
-blob='{"salt":"...","nonce":"...","ciphertext":"...","version":"1"}'
-
-curl -X PUT https://api.password-manager.cloud/v1/vaults/${vault_id} \
+AUTH=$(curl -sS -X POST "$CLOUD_URL/v1/auth/login" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${token}" \
-  -d "{
-    \"vault_id\": \"${vault_id}\",
-    \"token\": \"${token}\",
-    \"blob\": \"${blob}\"
-  }"
+  -d '{"username":"prova","password":"una-contrasenya-llarga"}')
+
+ACCESS_TOKEN=$(printf '%s' "$AUTH" | jq -r .access_token)
+REFRESH_TOKEN=$(printf '%s' "$AUTH" | jq -r .refresh_token)
 ```
 
-### Eliminar una SherLock
+Si el nom o la contrasenya no són correctes, la resposta és `401`. El servidor no diu quin dels dos camps falla.
+
+### 3. Renovar el testimoni d'accés
+
+El JWT dura 15 minuts. Quan caduca, les rutes amb `Bearer` tornen `401` amb `El token ha caducat`. Demana'n un de nou:
 
 ```bash
-vault_id="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-token="X9y8Z7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2H1g0F"
+AUTH=$(curl -sS -X POST "$CLOUD_URL/v1/auth/refresh" \
+  -H "Content-Type: application/json" \
+  -d "{\"refresh_token\":\"$REFRESH_TOKEN\"}")
 
-curl -X DELETE https://api.password-manager.cloud/v1/vaults/${vault_id} \
-  -H "Authorization: Bearer ${token}"
+ACCESS_TOKEN=$(printf '%s' "$AUTH" | jq -r .access_token)
 ```
 
-## Node.js
+La resposta torna el mateix `refresh_token` que has enviat. No cal substituir-lo. Si el testimoni de refresc ha caducat o s'ha revocat, la resposta és `401` i toca tornar a iniciar sessió.
 
-```javascript
-const axios = require("axios");
+### 4. Comprovar l'estat del compte
 
-const RAILWAY_URL = "https://api.password-manager.cloud";
-const VAULT_ID = "el-teu-vault-id";
-const TOKEN = "el-teu-token";
-const MASTER_PASSWORD = "la-teu-mestra-16caracters";
-
-async function main() {
-  const client = axios.create({
-    baseURL: `${RAILWAY_URL}/v1/vaults`,
-    headers: {
-      Authorization: `Bearer ${TOKEN}`,
-      "Content-Type": "application/json",
-    },
-  });
-
-  // Descarregar la SherLock
-  const response = await client.get(`/${VAULT_ID}`);
-  const vault = response.data;
-
-  // Processa les dades blocades aquí
-  console.log(`Descarregada versió ${vault.version}`);
-
-  // Pujar actualitzacions
-  const blob = '{"salt":"...","nonce":"...","ciphertext":"...","version":"1"}';
-  await client.put(`/${VAULT_ID}`, {
-    vault_id: VAULT_ID,
-    token: TOKEN,
-    blob: blob,
-  });
-
-  console.log("Actualitzacions pujades");
-}
-
-main().catch(console.error);
+```bash
+curl -sS "$CLOUD_URL/v1/auth/me" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" | jq
 ```
 
-## Go
+La resposta té `user_id`, `username`, `email`, `vault_id`, `has_vault`, `vault_version` i `updated_at`. Un compte nou té `has_vault` a `false`, `vault_version` a `0` i `updated_at` a `null`.
 
-```go
-package main
+### 5. Descarregar la caixa
 
-import (
-    "bytes"
-    "encoding/json"
-    "fmt"
-    "net/http"
-)
-
-type VaultRequest struct {
-    VaultID string `json:"vault_id"`
-    Token   string `json:"token"`
-    Blob    string `json:"blob"`
-}
-
-type VaultResponse struct {
-    VaultID string `json:"vault_id"`
-    Blob    string `json:"blob"`
-    Version int    `json:"version"`
-}
-
-func main() {
-    url := "https://api.password-manager.cloud/v1/vaults"
-    vaultID := "el-teu-vault-id"
-    token := "el-teu-token"
-
-    // Registre una nova SherLock
-    reqBody := VaultRequest{
-        VaultID: vaultID,
-        Token:   token,
-        Blob:    "{}",
-    }
-
-    jsonData, _ := json.Marshal(reqBody)
-    resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
-    if err != nil {
-        panic(err)
-    }
-    defer resp.Body.Close()
-
-    // Processa la resposta...
-}
+```bash
+curl -sS "$CLOUD_URL/v1/vault" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" | jq
 ```
 
-## TypeScript (Frontend)
+Si encara no hi ha caixa, la resposta és `404` amb `Encara no hi ha cap SherLock desada per aquest usuari`. Quan n'hi ha, els camps són `vault_id`, `blob`, `version` i `updated_at`.
 
-```typescript
-interface VaultResponse {
+`version` és la revisió de la caixa al servidor. No el confonguis amb el `version` de dins del `blob`, que és el format del sobre xifrat i ara val `"1"`.
+
+### 6. Pujar la caixa
+
+Prepara el cos de la petició amb el blob xifrat:
+
+```bash
+BLOB='{"version":"1","salt":"...","nonce":"...","ciphertext":"..."}'
+jq -n --arg blob "$BLOB" '{blob: $blob}' > vault-upload.json
+```
+
+Els `...` són llocs on va el contingut real. El servidor comprova que `salt` i `nonce` siguin base64 de la longitud correcta i que `ciphertext` no sigui massa curt. Si el blob no compleix aquestes comprovacions, la resposta serà `422`.
+
+En un compte sense caixa, la primera pujada no porta `expected_version`:
+
+```bash
+UPLOAD=$(curl -sS -X PUT "$CLOUD_URL/v1/vault" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary @vault-upload.json)
+
+printf '%s\n' "$UPLOAD" | jq
+VERSION=$(printf '%s' "$UPLOAD" | jq -r .version)
+```
+
+En un compte nou, això crea la versió 1. Per actualitzar, envia la versió que acabes de rebre:
+
+```bash
+jq --argjson v "$VERSION" '. + {expected_version: $v}' vault-upload.json > vault-update.json
+
+curl -sS -X PUT "$CLOUD_URL/v1/vault" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary @vault-update.json | jq
+```
+
+Si la caixa ja existeix i `expected_version` falta, la resposta és `409` amb `Cal la versió del núvol per sobreescriure una SherLock existent`. Si la versió és vella, també és `409`, però amb `Conflicte de versió: la SherLock ha canviat mentrestant`. Baixa la caixa, mira quina versió tens i torna a pujar amb la versió actual. No reintentis amb la mateixa.
+
+### 7. Tancar la sessió
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST "$CLOUD_URL/v1/auth/logout" \
+  -H "Content-Type: application/json" \
+  -d "{\"refresh_token\":\"$REFRESH_TOKEN\"}"
+```
+
+Respon `204`. Es revoquen tots els testimonis de refresc del compte i puja `token_version`, així que la sessió cau també als altres dispositius. El testimoni d'accés actual deixa de valer. La caixa local no es toca.
+
+### 8. Eliminar el compte
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' -X DELETE "$CLOUD_URL/v1/auth/me" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+```
+
+Respon `204`. S'eliminen el compte, la caixa i els testimonis de refresc. No cal esborrar la caixa abans. Si el testimoni d'accés ha caducat, renova'l primer; si no, la resposta serà `401`.
+
+No tanquis la sessió i després facis el `DELETE` amb el mateix testimoni d'accés. Tancar la sessió invalida el testimoni i el `DELETE` et tornarà `401`. Tria una de les dues accions o torna a iniciar sessió.
+
+## TypeScript
+
+Un exemple curt amb `fetch`. No xifra res: el `blob` ha de venir del client que té la contrasenya mestra.
+
+```ts
+type Auth = {
+  access_token: string;
+  refresh_token: string;
+};
+
+type Vault = {
   vault_id: string;
   blob: string;
   version: number;
   updated_at: string;
-}
+};
 
-const RAILWAY_URL = "https://api.password-manager.cloud";
+const baseUrl = "https://<el-teu-projecte>.up.railway.app";
 
-async function getVault(
-  vaultId: string,
-  token: string,
-): Promise<VaultResponse> {
-  const response = await fetch(`${RAILWAY_URL}/v1/vaults/${vaultId}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    },
+async function refresh(refreshToken: string): Promise<Auth> {
+  const response = await fetch(`${baseUrl}/v1/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+    throw new Error(`No s'ha pogut renovar la sessió: ${response.status}`);
   }
 
   return response.json();
 }
 
-async function updateVault(
-  vaultId: string,
-  token: string,
+async function saveVault(
+  accessToken: string,
   blob: string,
-): Promise<VaultResponse> {
-  const response = await fetch(`${RAILWAY_URL}/v1/vaults/${vaultId}`, {
+  expectedVersion?: number,
+): Promise<Vault | null> {
+  const response = await fetch(`${baseUrl}/v1/vault`, {
     method: "PUT",
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      vault_id: vaultId,
-      token: token,
-      blob: blob,
+      blob,
+      expected_version: expectedVersion,
     }),
   });
 
+  if (response.status === 409) {
+    return null; // baixa la caixa i torna a provar amb la versió nova
+  }
+
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Unknown error");
+    throw new Error(`Error en pujar la caixa: ${response.status}`);
   }
 
   return response.json();
 }
-
-// Ús
-(async () => {
-  try {
-    const vault = await getVault(
-      "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      "token123",
-    );
-    console.log(`Versió: ${vault.version}`);
-
-    const updated = await updateVault(
-      "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      "token123",
-      "blob",
-    );
-    console.log("Actualitzat!");
-  } catch (error) {
-    console.error("Error:", error);
-  }
-})();
 ```
 
-## Rust
+`saveVault` sense `expectedVersion` serveix per a la primera pujada. En una caixa existent, passa-hi la versió que t'ha tornat l'últim `GET` o `PUT`.
 
-```rust
-use reqwest;
-use serde_json::json;
+## Errors comuns
 
-#[derive(serde::Deserialize)]
-struct VaultResponse {
-    vault_id: String,
-    blob: String,
-    version: i32,
-    updated_at: String,
-}
+| Codi | Què passa | Què fer |
+| --- | --- | --- |
+| `400` | `Content-Length` invàlid, o identificador de caixa amb format incorrecte en una ruta explícita. | Revisa la mida o el `vault_id` si fas servir una ruta explícita. |
+| `401` | Falta el `Bearer`, el testimoni ha caducat o s'ha revocat, o les credencials són dolentes. | Si tens un testimoni de refresc, renova'n un d'accés. Si també falla o les credencials són dolentes, torna a iniciar sessió. |
+| `404` | El compte no té caixa, o la caixa no és d'aquest usuari. | És normal abans de la primera pujada. Si la caixa existeix, mira que el testimoni sigui del compte correcte. |
+| `409` | Conflicte de versió, nom d'usuari ocupat o identificador de caixa en ús en una ruta explícita. | Baixa la caixa i torna a pujar amb la versió actual. |
+| `411` | Has enviat un `POST` o `PUT` sense `Content-Length`. | Fes servir `-d` o `--data-binary`; els clients que fan streaming han de declarar la mida. |
+| `413` | El cos o el blob és massa gran. | El blob per defecte és de 10 MB i el cos de 12 MB. |
+| `422` | El blob no té el format esperat, o el cos no passa la validació. | Comprova que el blob sigui el sobre xifrat sencer i que els camps siguin base64, o revisa els camps del compte. |
+| `429` | Massa intents d'autenticació. | Espera abans de tornar-ho a provar. |
 
-async fn get_vault(vault_id: &str, token: &str) -> Result<VaultResponse, reqwest::Error> {
-    let client = reqwest::Client::new();
-    let response = client
-        .get(format!("https://api.password-manager.cloud/v1/vaults/{}", vault_id))
-        .header("Authorization", format!("Bearer {}", token))
-        .send()
-        .await?
-        .json()
-        .await?;
+## Referència ràpida
 
-    Ok(response)
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let vault_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
-    let token = "token123";
-
-    let vault = get_vault(vault_id, token).await?;
-    println!("Versió: {}", vault.version);
-
-    Ok(())
-}
-```
-
-## Errors Comuns
-
-### 409 Vault Already Exists
-
-```json
-{
-  "detail": "Vault already exists"
-}
-```
-
-**Solució**: El `vault_id` ja existeix. Utilitza un identificador únic.
-
-### 404 Vault Not Found
-
-```json
-{
-  "detail": "Vault not found"
-}
-```
-
-**Solució**: El `vault_id` no existeix. Crea una nova SherLock primer.
-
-### 409 Version Conflict
-
-```json
-{
-  "detail": "Version conflict: expected 1, got 2"
-}
-```
-
-**Solució**: Hi ha hagut un conflicte de versió. L'altra instància actualitzà alhora. Actualitza amb la nova versió del servidor.
-
-### 401 Unauthorized
-
-```json
-{
-  "detail": "Invalid token"
-}
-```
-
-**Solució**: El token és invàlid. Verifica que estàs enviant el token correcte.
-
-## Referència de la API
-
-| Mètode   | Endpoint                | Descripció              |
-| -------- | ----------------------- | ----------------------- |
-| `POST`   | `/v1/vaults`            | Registrar nova SherLock |
-| `GET`    | `/v1/vaults/{vault_id}` | Descarregar SherLock    |
-| `PUT`    | `/v1/vaults/{vault_id}` | Actualitzar SherLock    |
-| `DELETE` | `/v1/vaults/{vault_id}` | Eliminar SherLock       |
-
-## Preguntes Freqüents
-
-**Q: Com genero una SherLock única?**
-A: Utilitza `uuid.uuid4().hex` per crear un `vault_id` únic.
-
-**Q: Què és el token?**
-A: El token s'utilitza per a autenticació i control de versió. Genera un string aleatori amb `secrets.token_urlsafe(32)`.
-
-**Q: Com manejo els conflictes de versió?**
-A: Inclou `expected_version` en el `PUT` request. Si el servidor té una versió diferent, obtindràs un 409 i hauràs de tornar a descarregar amb la nova versió.
+| Mètode | Ruta | Autenticació | Resposta |
+| --- | --- | --- | --- |
+| `POST` | `/v1/auth/register` | cap | `201` amb el compte i els testimonis |
+| `POST` | `/v1/auth/login` | cap | `200` amb el compte i els testimonis |
+| `POST` | `/v1/auth/refresh` | `refresh_token` al cos | `200` amb un testimoni d'accés nou |
+| `POST` | `/v1/auth/logout` | `refresh_token` al cos | `204` |
+| `GET` | `/v1/auth/me` | `Bearer` | `200` amb el resum del compte |
+| `DELETE` | `/v1/auth/me` | `Bearer` | `204` |
+| `GET` | `/v1/vault` | `Bearer` | `200`, o `404` si encara no hi ha caixa |
+| `PUT` | `/v1/vault` | `Bearer` | `200` amb la caixa desada |
+| `GET` | `/v1/auth/check-username/{username}` | cap | `200` amb `available` |

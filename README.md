@@ -1,51 +1,53 @@
 # Password Manager Cloud API
 
-Encrypted vault storage for SherLock, deployed on Railway with a persistent
-SQLite volume. Encryption and decryption happen only in the desktop client; the
-server stores ciphertext and account metadata.
+Cloud backend for SherLock. It runs on Railway, stores data in SQLite, and keeps encrypted vaults plus the account records needed to sync them. Encryption happens in the desktop client. The server never receives the master password or plaintext entries.
+
+For deployment steps see [DEPLOYMENT.md](DEPLOYMENT.md); for a curl walkthrough see [SETUP.md](SETUP.md) and [EXAMPLES.md](EXAMPLES.md). The user-facing data policy is in [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
+
+## What the server stores
+
+The `users` table holds the username, optional email, an Argon2id hash of the cloud account password, the creation date, a token version and the vault id. The `vaults` table holds the encrypted blob, its revision and the last update time. The `refresh_tokens` table holds SHA-256 hashes of refresh tokens, their expiry and whether they were revoked.
+
+The app uses a cloud account password that is separate from the master password. The server only hashes the account password; the master password stays on the client.
+
+No plaintext entry, note, folder or master password is stored. Uploads are checked for the expected envelope shape before they can replace a stored vault, but the server cannot decrypt them.
 
 ## Security model
 
-- Account passwords are hashed with Argon2id; only the hash is stored.
-- Access tokens are short-lived HS256 JWTs (15 minutes). Their `sub` claim is
-  the immutable numeric user id, never the username.
-- Refresh tokens are random 48-byte values stored only as SHA-256 hashes and
-  can be revoked per account (`token_version`).
-- A vault belongs to exactly one user. Foreign ids return `404` and cannot be
-  claimed or overwritten.
-- The server validates the encrypted-vault envelope (`version`, base64 salt,
-  nonce and ciphertext) without decrypting it.
-- Updates require `expected_version`; the conditional `UPDATE` and the version
-  check are atomic, so two clients cannot silently overwrite each other.
-- Default vault ids are random. They are not derived from the username.
-- Authentication attempts are rate-limited per key. Set `TRUST_PROXY=1` behind
-  Railway's edge so the limits use the forwarded client IP.
+- Account passwords use Argon2id. Unknown usernames are checked against a dummy hash, so a failed login does not answer faster for a missing account.
+- Access tokens are HS256 JWTs that expire after 15 minutes. `sub` is the numeric user id, not the username. `ver` is the account's current `token_version`.
+- Refresh tokens are random 48-byte values. Only their SHA-256 hash is stored. Logout revokes every refresh token for the account and bumps `token_version`, which also stops access tokens that were already issued.
+- A vault belongs to one user. Another user's vault id cannot be read, claimed or overwritten: reads and deletes return `404`, and an explicit-id write returns `409`. Vault rows without an owner stay inaccessible. Default vault ids are random and are not derived from the username.
+- Updates require `expected_version`. The version check and the `UPDATE` run as one conditional statement, so two clients cannot silently overwrite each other.
+
+Login, registration, username checks and refresh calls are rate-limited in memory. Set `TRUST_PROXY=1` only behind a proxy that sets `X-Forwarded-For`; the code uses the last address in that header. Request bodies are capped, and `POST`, `PUT` and `PATCH` requests must send `Content-Length`.
 
 ## Account endpoints
 
-| Method | Path | Description |
+| Method | Path | Result |
 | --- | --- | --- |
-| `POST` | `/v1/auth/register` | Create an account and return access/refresh tokens plus `vault_id`. |
-| `POST` | `/v1/auth/login` | Exchange username/password for tokens. |
-| `POST` | `/v1/auth/refresh` | Exchange a refresh token for a new access token. |
-| `POST` | `/v1/auth/logout` | Revoke all refresh tokens for the account. |
-| `GET` | `/v1/auth/me` | Current account and vault summary. |
-| `DELETE` | `/v1/auth/me` | Delete the account, its vault and its refresh tokens. |
+| `POST` | `/v1/auth/register` | `201` with the new account, tokens and `vault_id` |
+| `POST` | `/v1/auth/login` | `200` with the same fields |
+| `POST` | `/v1/auth/refresh` | `200` with a new access token; the refresh token is returned unchanged |
+| `POST` | `/v1/auth/logout` | `204`; revokes every refresh token for the account |
+| `GET` | `/v1/auth/me` | `200` with an account summary: `has_vault`, `vault_version`, `updated_at` |
+| `DELETE` | `/v1/auth/me` | `204`; deletes the account, its vault and its refresh tokens |
+| `GET` | `/v1/auth/check-username/{username}` | `200` with `{"available": true}` or `{"available": false, "reason": ...}` |
+
+Register and login return `user_id`, `username`, `email`, `access_token`, `refresh_token`, `vault_id` and `token_type`. `email` is optional.
+
+Logout changes `token_version`, so the access token you used for the call stops working too. If you want to delete the account, call `DELETE /v1/auth/me` first. If you log out first, you will need to log in again before deleting.
 
 ## Vault endpoints
 
-All vault calls use `Authorization: Bearer <access_token>`.
+Vault calls need `Authorization: Bearer <access_token>`.
 
-| Method | Path | Description |
+| Method | Path | Result |
 | --- | --- | --- |
-| `GET` | `/v1/vault` | Download the account's vault. |
-| `PUT` | `/v1/vault` | Create the first vault or update it with `expected_version`. |
-| `GET` | `/v1/vaults/{vault_id}` | Download an explicit vault (owner only). |
-| `PUT` | `/v1/vaults/{vault_id}` | Update an explicit vault (owner only, `expected_version` required). |
-| `POST` | `/v1/vaults` | Create an explicit vault id (owner only). |
-| `DELETE` | `/v1/vaults/{vault_id}` | Delete an explicit vault (owner only). |
+| `GET` | `/v1/vault` | `200` with the account's vault, or `404` before the first upload |
+| `PUT` | `/v1/vault` | `200` with the stored vault; creates version 1 or updates with `expected_version` |
 
-Example update:
+A new account has a `vault_id` but no vault row. The first `PUT /v1/vault` creates the row at version 1. After that, `expected_version` is required. A missing or stale version returns `409`, and the client has to download the current vault before retrying.
 
 ```http
 PUT /v1/vault
@@ -53,24 +55,25 @@ Content-Type: application/json
 Authorization: Bearer {access_token}
 
 {
-  "blob": "{\"salt\":\"...\",\"nonce\":\"...\",\"ciphertext\":\"...\",\"version\":\"1\"}",
+  "blob": "{\"version\":\"1\",\"salt\":\"...\",\"nonce\":\"...\",\"ciphertext\":\"...\"}",
   "expected_version": 3
 }
 ```
 
-`expected_version` is mandatory when the vault already exists. A missing or
-stale version returns `409`; the client should download or resolve the conflict.
+The `blob` is the encrypted envelope generated by the client. The server checks that it is valid JSON with a supported `version`, base64 `salt` and `nonce` of the right length, and a `ciphertext` that is not too short. It does not decrypt it.
+
+The server still exposes the explicit-id routes: `POST /v1/vaults`, and `GET`, `PUT` or `DELETE /v1/vaults/{vault_id}`. They use the same Bearer token and owner check, and still need `expected_version` to overwrite. The `token` field in the old registration body is ignored. New code should stay on `/v1/vault`.
 
 ## Configuration
 
-- `SESSION_SECRET` (required): stable secret used to sign JWTs. Rotating it
-  signs everyone out.
-- `DB_DIR`: directory for `vaults.db` (defaults to `/data` when it exists).
-- `CORS_ORIGINS`: optional comma-separated allow-list. No wildcard default.
-- `MAX_BLOB_BYTES`: maximum encrypted vault size (default 10 MB).
-- `MAX_REQUEST_BODY_SIZE`: maximum HTTP body (default 12 MB).
-- `TRUST_PROXY`: set to `1` only when a trusted reverse proxy sets
-  `X-Forwarded-For` (Railway does).
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `SESSION_SECRET` | none, required | Signs JWTs. Rotating it invalidates access tokens already issued; a client with a valid refresh token can get a new one. |
+| `DB_DIR` | `/data` if it exists, otherwise `.` | Directory for `vaults.db`. |
+| `CORS_ORIGINS` | empty | Comma-separated allow-list. Empty means no CORS middleware and no wildcard. |
+| `MAX_BLOB_BYTES` | `10485760` (10 MB) | Maximum size of the encrypted blob. |
+| `MAX_REQUEST_BODY_SIZE` | `12582912` (12 MB) | Maximum HTTP body size. |
+| `TRUST_PROXY` | off | Set to `1` only when a trusted proxy sets `X-Forwarded-For`. |
 
 ## Development
 
@@ -83,7 +86,9 @@ export DB_DIR="$(mktemp -d)"
 uvicorn app.main:app --reload --port 8000
 ```
 
-Tests use an isolated temporary database and clean rate-limit state:
+The API listens on `http://127.0.0.1:8000`. `GET /healthz` returns the service name and version; Railway uses it as the healthcheck.
+
+Tests use a temporary database and clear the in-memory rate-limit state:
 
 ```bash
 python -m pytest -q
@@ -119,7 +124,4 @@ CREATE TABLE refresh_tokens (
 );
 ```
 
-`token_digest` is a legacy column; authentication no longer uses it. Vault rows
-with a `NULL` owner are treated as inaccessible and are never auto-claimed.
-Older databases are backed up to `vaults.db.bak-<timestamp>` before a schema
-upgrade.
+`token_digest` is a legacy column; authentication no longer uses it. Vault rows with a `NULL` owner are treated as inaccessible and are never claimed automatically. Before a schema upgrade, an older database is copied to `vaults.db.bak-<timestamp>`. Connections use WAL mode.

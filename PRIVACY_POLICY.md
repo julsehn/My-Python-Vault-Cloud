@@ -1,185 +1,56 @@
-# Privacy Policy - Password Manager Cloud
+# Política de privacitat de Password Manager Cloud
 
-**Last Updated:** September 2026
+**Darrera actualització:** novembre de 2026
 
-## 1. Introduction
+Aquesta política explica què passa amb les teves dades quan uses el servei oficial de Password Manager Cloud. Si fas servir un servidor propi, aquesta política no s'hi aplica: les dades les controla qui gestiona aquell servidor.
 
-This Privacy Policy explains how the **Password Manager Cloud** service handles your data, focusing on the security and privacy of your encrypted vault.
+## Què guardem
 
-## 2. What We Store
+Perquè el servei funcioni, al servidor hi ha:
 
-The official cloud service stores **only**:
+- Les dades del compte: nom d'usuari, correu electrònic si l'has indicat, un hash Argon2id de la contrasenya del compte i la data de creació.
+- La caixa xifrada: el fitxer que puja l'aplicació, la seva versió i la data de l'última actualització.
+- Les sessions: un hash dels testimonis de refresc, la data de caducitat i si s'han revocat.
 
-### ✅ What IS Stored:
-- **Encrypted vault blob** - Your passwords are encrypted with AES-256-GCM before upload
-- **Salt** - Used for key derivation (Argon2id)
-- **Nonce** - Used for authenticated encryption
-- **User authentication data** - Username and SHA256 password hash (for login)
+No guardem la contrasenya mestra, les contrasenyes desxifrades, les notes ni cap altre contingut de la caixa. El servidor rep la caixa ja xifrada i no pot desxifrar-la.
 
-### 🔒 What is NEVER Stored:
-- ❌ Your master password
-- ❌ Any decrypted password
-- ❌ Notes or personal data
-- ❌ Session cookies or tokens
-- ❌ Your devices or IP addresses
+## Què no guardem
 
-## 3. Encryption Details
+- La contrasenya mestra.
+- El contingut desxifrat de la caixa.
+- Adreces IP a la base de dades. Les fem servir de manera temporal, en memòria, per limitar intents d'accés repetits.
+- Dades de navegació o estadístiques d'ús.
 
-### Client-Side Encryption
-Your vault is encrypted **on your device** before being sent to our servers:
+## Com es protegeix la caixa
 
-```
-Plain Passwords → AES-256-GCM Encryption → Encrypted Vault Blob → Cloud Storage
-```
+L'aplicació xifra la caixa al teu dispositiu abans de pujar-la. Fa servir AES-256-GCM i deriva la clau de la contrasenya mestra amb Argon2id (64 MiB de memòria i 3 passades). El servidor només veu el resultat xifrat.
 
-### Key Derivation
+Això vol dir que, si algú accedeix a la base de dades del servidor, hi trobarà la caixa xifrada, però no les contrasenyes. La clau no surt mai del teu dispositiu.
 
-- Algorithm: Argon2id
-- Iterations: 3 passes (time_cost=3, memory_cost=64 MiB)
-- Salt: Random 16-byte value per vault
-- Key Length: 32 bytes (256-bit)
+## Qui pot accedir a la caixa
 
-### Encryption Standard
+Només tu, amb la contrasenya mestra. Cada compte està aïllat: cada caixa pertany a un usuari i les consultes comproven la sessió i la propietat. L'equip del servei no pot desxifrar les caixes dels usuaris.
 
-- **AES-256-GCM**: Industry-standard authenticated encryption
-- Provides confidentiality AND integrity
-- Nonce is 12 bytes (96-bit)
-- Associated Data: None (simpler, faster)
+## Sessions
 
-## 4. Server Access Control
+En iniciar sessió, el servidor dona un testimoni d'accés de curta durada (uns 15 minuts) i un testimoni de refresc. El testimoni de refresc es guarda com un hash, no en text pla.
 
-### Who Can Access Your Data?
+Quan tanques la sessió, es revoquen els testimonis de refresc del compte. Això vol dir que també es tancarà la sessió als altres dispositius on hagis iniciat sessió amb el mateix compte.
 
-**ONLY YOU** can access your vault contents because:
+## Exportar i eliminar
 
-1. The server only stores the **encrypted blob**
-2. Decryption requires your **master password**
-3. The server never has your master password
-4. Server staff **cannot decrypt** your vault
-5. Your data is encrypted **at rest** in the database
+Pots exportar les teves entrades des de l'aplicació quan vulguis. Aquesta exportació surt sense xifrar, així que val la pena guardar-la en un lloc segur. També pots eliminar el compte i les dades del núvol des de la configuració de l'aplicació. En fer-ho, s'eliminen la caixa i les dades de sessió del servidor.
 
-### Authentication Required
-All API endpoints require JWT authentication:
+La còpia local no es toca si tanques la sessió o elimines el compte del núvol.
 
-- `/v1/vaults` - Upload/Download vault
-- `/v1/auth/*` - Register/Login
-- Each user has their own isolated vault
+## Si oblides la contrasenya mestra
 
-## 5. What Happens on Your Device
+No la podem recuperar. No la guardem enlloc i no hi ha cap porta del darrere. Si la perds, la caixa xifrada no es pot obrir. Aquesta és una conseqüència directa del fet que el servei no tingui la clau.
 
-### When Uploading:
+## Canvis en aquesta política
 
-1. You enter your master password
-2. Client derives encryption key from password + salt
-3. Vault is encrypted client-side
-4. Encrypted blob is sent to cloud
-5. **Your device never holds the key and ciphertext together**
+Si canvia alguna cosa important, actualitzarem aquest document i la data de dalt. La versió que es mostra dins l'aplicació és una còpia d'aquest document.
 
-### When Downloading:
+## Contacte
 
-1. Client downloads encrypted blob
-2. You enter master password
-3. Client derives key
-4. **Client decrypts** locally
-5. **Password Manager Cloud never sees decrypted data**
-
-## 6. Data Isolation
-
-Each user's vault is completely isolated:
-
-- Database rows are keyed by `user_id` and `vault_id`
-- Token-based authentication ensures only authorized access
-- User A cannot access User B's data even if they compromise the server
-
-## 7. What We Don't Do
-
-- ❌ We don't scan your vault contents
-- ❌ We don't log vault data
-- ❌ We don't access decrypted passwords
-- ❌ We don't track user behavior
-- ❌ We don't sell data
-- ❌ We don't share with third parties
-
-## 8. Security Measures
-
-### On Our End:
-
-- SQLite database with token-based access control
-- HTTPS-only communication
-- CORS protection for web clients
-- Server-side version control prevents conflicts
-
-### On Your End:
-- Master password required for all operations
-- Local vault file protected by encryption
-- Session timeout auto-locks (configurable)
-
-## 9. Your Rights
-
-You own your data completely:
-
-- **Delete vault:** Remove from cloud instantly
-- **Export:** Download encrypted blob anytime
-- **Backup:** Your encrypted file is portable
-- **Forget us:** Delete cloud vault, keep local copy
-
-## 10. Technical Transparency
-
-### Encryption Flow Diagram:
-
-```
-┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
-│   YOUR DEVICE   │      │  PASSWORD CLOUD │      │  YOUR DEVICE   │
-├─────────────────┤      ├─────────────────┤      ├─────────────────┤
-│ 1. Enter vault  │      │                 │      │ 2. Enter vault  │
-│    password     │      │                 │      │    password     │
-└────────┬────────┘      │                 │      │   (via client)  │
-         │               │                 │      │                  │
-         │ 3. Derive key │                 │      │ 6. Decrypt blob  │
-         │   (Argon2id)  │                 │      │                  │
-         │──────────────►│                 │      │                  │
-         │               │  4. Encrypt blob │      │                  │
-         │               │    (AES-256)     │      │ 7. View passwords│
-         │               │────────────────►│      │                  │
-         │               │ 5. Store encrypted│     │                  │
-         │               │    vault blob    │      │                  │
-         │◄──────────────│─────────────────│      │                  │
-         │    JWT Auth   │                 │      │                  │
-         │◄──────────────│                 │      │                  │
-         │ 6. Decrypt    │                 │      │                  │
-```
-
-### Why This is Secure:
-
-- **Zero-Knowledge Architecture:** Server cannot decrypt your data
-- **End-to-End Encryption:** Encryption happens on client only
-- **Cryptographic Standards:** AES-256-GCM with Argon2id key derivation
-- **Authentication Required:** JWT tokens prevent unauthorized access
-
-## 11. Legal Disclaimer
-
-**We cannot help you recover your password** if you forget it. We never store your master password - only your encrypted vault.
-
-**Technical Limitations:**
-- If you forget your master password, we cannot decrypt your vault
-- The salt allows proper key derivation but no backdoor exists
-- Your encrypted vault blob is cryptographically secure
-
-## 12. Updates to This Policy
-
-This policy may be updated periodically. We recommend reviewing it regularly.
-
----
-
-## Summary
-
-| Aspect | Status |
-|--------|--------|
-| Can we see your passwords? | ❌ **NO** - Encrypted with AES-256-GCM |
-| Can we see your master password? | ❌ **NO** - Never transmitted or stored |
-| Can we access vault contents? | ❌ **NO** - Server cannot decrypt |
-| Who can decrypt your vault? | ✅ **Only YOU** - With your master password |
-| Is encryption reversible? | ✅ **Yes** - If you know your password |
-| Can staff access your data? | ❌ **NO** - Technically impossible |
-
-**Your passwords are yours alone. We're just the storage space - you hold the key.**
+Si tens dubtes o vols reportar un problema de privacitat, obre una incidència al repositori de Password Manager Cloud.
