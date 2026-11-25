@@ -25,7 +25,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, field_validator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import jwt
@@ -546,6 +546,18 @@ class UserRegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     password: str = Field(..., min_length=12, max_length=128)
     email: Optional[EmailStr] = None
+
+    @field_validator("password")
+    @classmethod
+    def password_is_strong(cls, value: str) -> str:
+        if not (
+            re.search(r"[A-Z]", value)
+            and re.search(r"[a-z]", value)
+            and re.search(r"\d", value)
+            and re.search(r"[^A-Za-z0-9\s]", value)
+        ):
+            raise ValueError("La contrasenya no compleix els requisits de seguretat")
+        return value
 
 
 class UserLoginRequest(BaseModel):

@@ -188,6 +188,26 @@ class ValidationErrorTests(unittest.TestCase):
         self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY)
         self.assertNotIn(short_password, response.text)
 
+    def test_registration_rejects_weak_passwords(self):
+        weak_passwords = [
+            "abcdefghijkl",      # cap majúscula, número ni símbol
+            "Abcdefghijk1",      # cap símbol
+            "abcdefghij1!",      # cap majúscula
+            "ABCDEFGHIJ1!",      # cap minúscula
+        ]
+        for password in weak_passwords:
+            response = _register(_unique("weak"), password)
+            self.assertEqual(
+                response.status_code,
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                msg=f"Contrasenya feble acceptada: {password}",
+            )
+            self.assertNotIn(password, response.text)
+
+    def test_registration_accepts_strong_password(self):
+        response = _register(_unique("strong"), "Str0ng-Passw0rd!")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
 
 class BlobValidationTests(unittest.TestCase):
     def test_empty_and_malformed_blobs_are_rejected(self):

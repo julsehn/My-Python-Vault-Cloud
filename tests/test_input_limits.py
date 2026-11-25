@@ -55,7 +55,7 @@ class InputLimitsTests(unittest.TestCase):
 
     def test_register_password_at_limit(self):
         """Registration with 128-character password succeeds."""
-        password = "a" * 128
+        password = "Aa1!" + "a" * 124
         username = f"test-user-{hashlib.sha256(str(time.time()).encode()).hexdigest()[:8]}"
         response = client.post(
             "/v1/auth/register",
